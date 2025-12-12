@@ -1,10 +1,10 @@
 import { GameConfig, ThemeConfig, ThemeType } from './types';
 
 export const CONFIG: GameConfig = {
-  mapWidth: 3000,
-  mapHeight: 3000,
-  roundTime: 90,
-  botCount: 7,
+  mapWidth: 6000,
+  mapHeight: 6000,
+  roundTime: 150,
+  botCount: 15,
 };
 
 export const COLORS = {
@@ -17,12 +17,27 @@ export const COLORS = {
   uiAccent: '#facc15',
 };
 
-// Growth factors
-export const INITIAL_HOLE_RADIUS = 30;
-export const MAX_HOLE_RADIUS = 400;
-export const GROWTH_FACTOR = 30; // Much higher so size increases are visible
-export const EATING_BUFFER = 2; // Radius difference required to eat another hole (prevents same-size kills)
+// Physics
+export const EATING_BUFFER = 2; // Radius difference required to eat another hole
 export const SWALLOW_SPEED = 5; // Speed at which objects are sucked in
+export const MAX_HOLE_RADIUS = 500;
+
+// Tier System for Step Growth
+export interface TierDef {
+    name: string;
+    minXp: number;
+    radius: number;
+}
+
+export const TIER_SYSTEM: TierDef[] = [
+  { name: 'MICRO VOID', minXp: 0, radius: 30 },
+  { name: 'TRASH PANDA', minXp: 150, radius: 55 },
+  { name: 'STREET SHARK', minXp: 500, radius: 85 },
+  { name: 'BLOCK BUSTER', minXp: 1500, radius: 140 },
+  { name: 'CITY SLICKER', minXp: 4000, radius: 220 },
+  { name: 'EARTH EATER', minXp: 10000, radius: 350 },
+  { name: 'GALACTIC GULP', minXp: 25000, radius: 500 },
+];
 
 // Theme Definitions
 export const THEMES: Record<ThemeType, ThemeConfig> = {
@@ -60,12 +75,3 @@ export const THEMES: Record<ThemeType, ThemeConfig> = {
     }
   }
 };
-
-// Ordered tiers for progression tracking (Using CITY radii as standard)
-export const TIER_THRESHOLDS = [
-  { threshold: THEMES.CITY.defs.SMALL.radius, label: 'TIER 1' },
-  { threshold: THEMES.CITY.defs.MEDIUM.radius, label: 'TIER 2' },
-  { threshold: THEMES.CITY.defs.LARGE.radius, label: 'TIER 3' },
-  { threshold: THEMES.CITY.defs.HUGE.radius, label: 'TIER 4' },
-  { threshold: MAX_HOLE_RADIUS, label: 'MAX LEVEL' }
-];

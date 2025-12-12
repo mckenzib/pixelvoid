@@ -1,5 +1,5 @@
 import { Entity, EntityType, ThemeConfig } from '../types';
-import { CONFIG, GROWTH_FACTOR, MAX_HOLE_RADIUS, EATING_BUFFER } from '../constants';
+import { CONFIG, TIER_SYSTEM, MAX_HOLE_RADIUS, EATING_BUFFER } from '../constants';
 
 // Helper for random range
 const random = (min: number, max: number) => Math.random() * (max - min) + min;
@@ -25,6 +25,7 @@ export const createMapEntities = (count: number, theme: ThemeConfig): Entity[] =
       pos: { x: random(100, CONFIG.mapWidth - 100), y: random(100, CONFIG.mapHeight - 100) },
       velocity: { x: 0, y: 0 },
       radius: def.radius,
+      xp: 0,
       color: def.color,
       scoreValue: def.score,
       isDead: false,
@@ -44,9 +45,10 @@ export const createBots = (count: number): Entity[] => {
       type: EntityType.BOT,
       pos: { x: random(100, CONFIG.mapWidth - 100), y: random(100, CONFIG.mapHeight - 100) },
       velocity: { x: 0, y: 0 },
-      radius: 30, // Initial radius same as player
+      radius: TIER_SYSTEM[0].radius, 
+      xp: 0,
       color: '#ff0055', // Bot outline color
-      scoreValue: 100, // Score for eating a bot
+      scoreValue: 100, // Initial Score for eating a bot
       isDead: false,
       scale: 1,
       label: names[i % names.length],
@@ -207,6 +209,18 @@ export const updateBotAI = (bot: Entity, entities: Entity[], player: Entity) => 
   }
 };
 
+const getRadiusFromXp = (xp: number): number => {
+    let r = TIER_SYSTEM[0].radius;
+    for (const tier of TIER_SYSTEM) {
+        if (xp >= tier.minXp) {
+            r = tier.radius;
+        } else {
+            break;
+        }
+    }
+    return r;
+}
+
 export const checkCollisions = (
   player: Entity, 
   bots: Entity[], 
@@ -237,12 +251,17 @@ export const checkCollisions = (
          obs.isDying = true;
          obs.consumedBy = predator;
          
-         // Grow logic (Area based roughly)
-         const massGained = obs.scoreValue * GROWTH_FACTOR;
-         const currentArea = Math.PI * predator.radius * predator.radius;
-         const newRadius = Math.sqrt((currentArea + massGained) / Math.PI);
+         // Add XP
+         predator.xp += obs.scoreValue;
          
-         predator.radius = Math.min(newRadius, MAX_HOLE_RADIUS);
+         // Update Radius based on Tiers
+         predator.radius = getRadiusFromXp(predator.xp);
+         
+         // Update Value of this hole (if it gets eaten)
+         if (predator.type === EntityType.BOT || predator.type === EntityType.PLAYER) {
+             predator.scoreValue = 100 + predator.xp;
+         }
+
          onEat(predator, obs);
       }
     });
@@ -259,20 +278,29 @@ export const checkCollisions = (
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       // Hole vs Hole Logic
-      // 1. Centers must be close (overlapping)
-      // 2. Predator must be STRICTLY larger + Buffer
       if (dist < predator.radius) {
         if (predator.radius > prey.radius + EATING_BUFFER) {
             // START SWALLOW ANIMATION
             prey.isDying = true;
             prey.consumedBy = predator;
             
-            // Massive growth for eating another hole
-            const massGained = (prey.radius * prey.radius * Math.PI) * 0.5; // Absorb 50% of their mass
-            const currentArea = Math.PI * predator.radius * predator.radius;
-            const newRadius = Math.sqrt((currentArea + massGained) / Math.PI);
+            // Massive XP Gain (Base + % of their XP)
+            const xpGain = 200 + (prey.xp * 0.5);
+            predator.xp += xpGain;
             
-            predator.radius = Math.min(newRadius, MAX_HOLE_RADIUS);
+            // Hack to pass the calculated value to the scoreboard via the prey object temporarily
+            // (or rely on prey.scoreValue being updated dynamically during their life)
+            // We'll update the prey's scoreValue to reflect the total gain for the consumer
+            prey.scoreValue = xpGain;
+
+            // Update Radius based on Tiers
+            predator.radius = getRadiusFromXp(predator.xp);
+            
+             // Update Value of this hole (if it gets eaten)
+            if (predator.type === EntityType.BOT || predator.type === EntityType.PLAYER) {
+                predator.scoreValue = 100 + predator.xp;
+            }
+
             onEat(predator, prey);
         }
       }

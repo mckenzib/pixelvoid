@@ -46,6 +46,7 @@ export interface Entity {
   pos: Vector2;
   velocity: Vector2;
   radius: number; // For collision
+  xp: number; // For tier progression
   color: string;
   targetPos?: Vector2; // For bots
   scoreValue: number;

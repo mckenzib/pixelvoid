@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GameState, Entity, EntityType, PlayerStats, ThemeType } from './types';
-import { CONFIG, COLORS, TIER_THRESHOLDS, MAX_HOLE_RADIUS, THEMES } from './constants';
+import { CONFIG, COLORS, TIER_SYSTEM, MAX_HOLE_RADIUS, THEMES } from './constants';
 import { createMapEntities, createBots, updateEntityPosition, updateBotAI, checkCollisions } from './services/gameLogic';
 import { generateGameCommentary } from './services/geminiService';
 
@@ -14,6 +14,7 @@ const App = () => {
   const botsRef = useRef<Entity[]>([]);
   const obstaclesRef = useRef<Entity[]>([]);
   const cameraRef = useRef({ x: 0, y: 0 });
+  const zoomRef = useRef(1); // Zoom level
   const mouseRef = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
   const timeRef = useRef(CONFIG.roundTime);
   const scoreRef = useRef(0);
@@ -52,7 +53,8 @@ const App = () => {
       type: EntityType.PLAYER,
       pos: { x: CONFIG.mapWidth / 2, y: CONFIG.mapHeight / 2 },
       velocity: { x: 0, y: 0 },
-      radius: 30,
+      radius: TIER_SYSTEM[0].radius,
+      xp: 0,
       color: COLORS.player,
       scoreValue: 0,
       isDead: false,
@@ -62,11 +64,12 @@ const App = () => {
     
     playerRef.current = player;
     botsRef.current = createBots(CONFIG.botCount);
-    // Pass theme for entity generation
-    obstaclesRef.current = createMapEntities(250, theme); 
+    // Pass theme for entity generation. Increased count for larger map.
+    obstaclesRef.current = createMapEntities(1000, theme); 
     timeRef.current = CONFIG.roundTime;
     scoreRef.current = 0;
     killsRef.current = 0;
+    zoomRef.current = 1;
     
     mouseRef.current = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     
@@ -86,7 +89,7 @@ const App = () => {
     const stats = {
       score: scoreRef.current,
       kills: killsRef.current,
-      maxSize: Math.floor(playerRef.current?.radius || 0),
+      maxSize: Math.floor(playerRef.current?.xp || 0), // Use XP as mass
       rank: playerRef.current?.isDead ? 99 : rank
     };
     
@@ -151,6 +154,15 @@ const App = () => {
             playerRef.current.velocity.y = 0;
           }
           updateEntityPosition(playerRef.current, dt);
+
+          // Update Zoom based on radius
+          const baseR = TIER_SYSTEM[0].radius;
+          const currentR = playerRef.current.radius;
+          // Zoom curve: starts at 1, approaches ~0.35 at max size
+          const targetZoom = Math.max(0.35, 1 / (1 + (currentR - baseR) / 300));
+          // Smooth transition
+          zoomRef.current += (targetZoom - zoomRef.current) * dt * 2;
+
         } else if (playerRef.current.isDying) {
            updateEntityPosition(playerRef.current, dt);
         }
@@ -168,7 +180,7 @@ const App = () => {
 
         checkCollisions(playerRef.current, botsRef.current, obstaclesRef.current, (predator, prey) => {
           if (predator.id === 'player') {
-            scoreRef.current += prey.scoreValue;
+            scoreRef.current += Math.floor(prey.scoreValue);
             setScore(scoreRef.current);
             if (prey.type === EntityType.BOT) killsRef.current++;
           }
@@ -178,29 +190,40 @@ const App = () => {
             handleGameOver(false);
         }
 
+        // Camera Update with Zoom
+        const zoom = zoomRef.current;
+        const viewW = canvas.width / zoom;
+        const viewH = canvas.height / zoom;
+
         if (playerRef.current) {
-          cameraRef.current.x = playerRef.current.pos.x - canvas.width / 2;
-          cameraRef.current.y = playerRef.current.pos.y - canvas.height / 2;
+          // Center camera on player in world coordinates
+          cameraRef.current.x = playerRef.current.pos.x - viewW / 2;
+          cameraRef.current.y = playerRef.current.pos.y - viewH / 2;
         }
       }
 
       // --- RENDERING ---
+      const zoom = zoomRef.current;
+      const viewW = canvas.width / zoom;
+      const viewH = canvas.height / zoom;
       
       const activeTheme = THEMES[selectedTheme];
 
+      // Prepare Transform
+      ctx.save();
+      ctx.scale(zoom, zoom);
+      ctx.translate(-cameraRef.current.x, -cameraRef.current.y);
+
+      // Background / Pattern
       if (patternRef.current) {
         ctx.fillStyle = patternRef.current;
-        ctx.save();
-        ctx.translate(-cameraRef.current.x, -cameraRef.current.y);
-        ctx.fillRect(cameraRef.current.x, cameraRef.current.y, canvas.width, canvas.height);
-        ctx.restore();
+        // Optimization: only draw what's visible + margin
+        ctx.fillRect(Math.floor(cameraRef.current.x), Math.floor(cameraRef.current.y), viewW + 1, viewH + 1);
       } else {
         ctx.fillStyle = activeTheme.background;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(cameraRef.current.x - 50, cameraRef.current.y - 50, viewW + 100, viewH + 100);
       }
 
-      ctx.save();
-      ctx.translate(-cameraRef.current.x, -cameraRef.current.y);
       
       // Map Borders
       ctx.strokeStyle = selectedTheme === 'CYBER' ? '#00ff00' : (selectedTheme === 'CANDY' ? '#ff69b4' : '#ff0000');
@@ -214,24 +237,30 @@ const App = () => {
       const startX = Math.floor(cameraRef.current.x / gridSize) * gridSize;
       const startY = Math.floor(cameraRef.current.y / gridSize) * gridSize;
       
-      for (let x = startX; x < cameraRef.current.x + canvas.width + gridSize; x += gridSize) {
+      for (let x = startX; x < cameraRef.current.x + viewW + gridSize; x += gridSize) {
         if (x < 0 || x > CONFIG.mapWidth) continue;
         ctx.beginPath();
         ctx.moveTo(x, Math.max(0, cameraRef.current.y));
-        ctx.lineTo(x, Math.min(CONFIG.mapHeight, cameraRef.current.y + canvas.height));
+        ctx.lineTo(x, Math.min(CONFIG.mapHeight, cameraRef.current.y + viewH));
         ctx.stroke();
       }
-      for (let y = startY; y < cameraRef.current.y + canvas.height + gridSize; y += gridSize) {
+      for (let y = startY; y < cameraRef.current.y + viewH + gridSize; y += gridSize) {
         if (y < 0 || y > CONFIG.mapHeight) continue;
         ctx.beginPath();
         ctx.moveTo(Math.max(0, cameraRef.current.x), y);
-        ctx.lineTo(Math.min(CONFIG.mapWidth, cameraRef.current.x + canvas.width), y);
+        ctx.lineTo(Math.min(CONFIG.mapWidth, cameraRef.current.x + viewW), y);
         ctx.stroke();
       }
 
       // Draw Obstacles
       obstaclesRef.current.forEach(obs => {
         if (obs.isDead) return;
+        // Optimization: Cull invisible
+        if (obs.pos.x + obs.radius < cameraRef.current.x || 
+            obs.pos.x - obs.radius > cameraRef.current.x + viewW ||
+            obs.pos.y + obs.radius < cameraRef.current.y ||
+            obs.pos.y - obs.radius > cameraRef.current.y + viewH) return;
+
         drawPixelEntity(ctx, obs, selectedTheme);
       });
 
@@ -257,7 +286,7 @@ const App = () => {
       // --- UI OVERLAYS ---
       if (gameStateRef.current === GameState.PLAYING && playerRef.current && !playerRef.current.isDead && !playerRef.current.isDying) {
          drawInputIndicator(ctx, canvas.width/2, canvas.height/2, mouseRef.current);
-         drawHUD(ctx, playerRef.current.radius, canvas.width, canvas.height);
+         drawHUD(ctx, playerRef.current.xp, canvas.width, canvas.height);
       }
 
       animationFrameId = requestAnimationFrame(gameLoop);
@@ -657,54 +686,74 @@ const drawInputIndicator = (ctx: CanvasRenderingContext2D, cx: number, cy: numbe
     }
 }
 
-const drawHUD = (ctx: CanvasRenderingContext2D, radius: number, width: number, height: number) => {
-    let currentTier = TIER_THRESHOLDS[0];
-    let prevThreshold = 0;
+const drawHUD = (ctx: CanvasRenderingContext2D, xp: number, width: number, height: number) => {
+    let currentTier = TIER_SYSTEM[0];
+    let nextTier = TIER_SYSTEM[1];
     
-    for (let i = 0; i < TIER_THRESHOLDS.length; i++) {
-        if (radius < TIER_THRESHOLDS[i].threshold) {
-            currentTier = TIER_THRESHOLDS[i];
+    // Find current tier
+    for (let i = 0; i < TIER_SYSTEM.length; i++) {
+        if (xp >= TIER_SYSTEM[i].minXp) {
+            currentTier = TIER_SYSTEM[i];
+            nextTier = TIER_SYSTEM[i+1] || { minXp: TIER_SYSTEM[i].minXp * 2, name: 'MAX', radius: 0 };
+        } else {
             break;
-        }
-        prevThreshold = TIER_THRESHOLDS[i].threshold;
-        if (i === TIER_THRESHOLDS.length - 1) {
-            currentTier = TIER_THRESHOLDS[i];
         }
     }
 
-    const progress = Math.min(1, Math.max(0, (radius - prevThreshold) / (currentTier.threshold - prevThreshold)));
-    
+    // Calculate progress
+    let progress = 0;
+    if (nextTier.name !== 'MAX') {
+         const tierSpan = nextTier.minXp - currentTier.minXp;
+         const currentProgress = xp - currentTier.minXp;
+         progress = Math.min(1, Math.max(0, currentProgress / tierSpan));
+    } else {
+        progress = 1;
+    }
+
     const barWidth = Math.min(400, width - 40);
     const barHeight = 24;
     const x = (width - barWidth) / 2;
     const y = height - 50;
 
+    // Bar Background
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
     ctx.fillRect(x, y, barWidth, barHeight);
     ctx.strokeRect(x, y, barWidth, barHeight);
 
+    // Bar Fill
     ctx.fillStyle = '#a855f7'; 
     ctx.fillRect(x + 2, y + 2, (barWidth - 4) * progress, barHeight - 4);
 
+    // Glitch effect on bar
     if (Math.random() > 0.9) {
         ctx.fillStyle = '#fff';
         const gx = x + Math.random() * barWidth;
         ctx.fillRect(gx, y, 4, barHeight);
     }
 
-    ctx.fillStyle = '#fff';
-    ctx.font = '12px "Press Start 2P"';
+    // Text Labels
     ctx.textAlign = 'center';
     
-    let label = `NEXT: ${currentTier.label}`;
-    if (radius >= MAX_HOLE_RADIUS) label = "MAX SIZE REACHED";
-    
+    // XP / Tier Name
+    const label = currentTier.name;
+    const nextLabel = nextTier.name !== 'MAX' ? `NEXT: ${nextTier.name}` : "MAX LEVEL";
+
+    // Draw Main Label (Tier Name)
+    ctx.font = '16px "Press Start 2P"';
     ctx.fillStyle = '#000';
-    ctx.fillText(label, width / 2 + 2, y - 10 + 2);
+    ctx.fillText(label, width / 2 + 2, y - 25 + 2); // Shadow
     ctx.fillStyle = '#fbbf24'; 
-    ctx.fillText(label, width / 2, y - 10);
+    ctx.fillText(label, width / 2, y - 25);
+
+    // Draw Small "Next" Label underneath or inside
+    ctx.font = '10px "Press Start 2P"';
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 4;
+    ctx.fillText(nextLabel, width / 2, y + barHeight + 15);
+    ctx.shadowBlur = 0;
 };
 
 const root = createRoot(document.getElementById('root')!);
