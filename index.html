@@ -1,44 +1,48 @@
 <!DOCTYPE html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PixelVoid.io</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background-color: #1a1a1a;
+        font-family: 'Press Start 2P', cursive;
+      }
+      canvas {
+        display: block;
+        image-rendering: pixelated; /* Essential for pixel art look */
+      }
+      /* Custom Scrollbar for chat/logs if needed */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1a1a1a; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #4ade80; 
+      }
+    </style>
 
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PixelVoid.io</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background-color: #1a1a1a;
-      font-family: 'Press Start 2P', cursive;
-    }
-
-    canvas {
-      display: block;
-      image-rendering: pixelated;
-      /* Essential for pixel art look */
-    }
-
-    /* Custom Scrollbar for chat/logs if needed */
-    ::-webkit-scrollbar {
-      width: 8px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: #1a1a1a;
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: #4ade80;
-    }
-  </style>
-  <script type="module" crossorigin src="./assets/index-C5-tL24A.js"></script>
+<link rel="stylesheet" href="/index.css">
+  <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/"
+  }
+}
+</script>
+  <script type="module" crossorigin src="./assets/index-DdFmN9ez.js"></script>
 </head>
-
-<body>
-  <div id="root"></div>
+  <body>
+    <div id="root"></div>
 </body>
-
 </html>
